@@ -1,0 +1,91 @@
+#!/bin/bash
+
+PIDFILE=/var/run/php5-tail.pid
+CONFFILE=/etc/php5-tail/config.php
+NAME="php5-tail --daemon"
+USER=user
+GROUP=group
+
+start()
+{
+    PID=`pgrep -f "$NAME"`
+    if [ -z "$PID" ]; then
+        if [ -f $PIDFILE ]; then rm -f $PIDFILE; fi
+    else
+        echo "php5-tail.pid already started."
+        return -1
+    fi
+
+    echo -n "Starting php5-tail.pid: "
+    php5-tail --daemon $PIDFILE --user $USER --group $GROUP --config $CONFFILE
+    echo "done."
+}
+
+start-stop-daemon()
+{
+    echo -n "Starting php5-tail: "
+    start-stop-daemon --start --quiet --pidfile $PIDFILE \
+        --exec php5-tail -- "--daemon $PIDFILE --user $USER --group $GROUP --config $CONFFILE" || true
+    echo "done."
+}
+
+stop()
+{
+    PID=`pgrep -f "$NAME"`
+    if [ -z "$PID" ]; then
+        echo "php5-tail already stopped."
+        return 0
+    fi
+
+    echo -n "Stopping php5-tail: "
+    pkill -TERM -f "$NAME"
+    count=0
+
+    while [ ! -z "$PID" ]; do
+        count=`expr $count + 1`
+        if [ `expr $count % 10` == 0 ]; then pkill -KILL -f "$NAME"; fi
+        if [ $count == 60 ]; then
+            echo " failed."
+            return -1
+        fi
+
+        sleep 1
+
+        PID=`pgrep -f "$NAME"`
+    done
+
+    rm -f $PIDFILE
+    echo "done."
+}
+
+restart()
+{
+    stop && start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        restart
+        ;;
+    reload)
+        pkill -HUP -f "$NAME"
+        ;;
+    condrestart)
+        if [ ! -f $PIDFILE ]; then
+            restart
+        elif [ ! -f /proc/`cat $PIDFILE`/status ]; then
+            restart
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|reload}"
+        exit 1
+        ;;
+esac
+exit $?
