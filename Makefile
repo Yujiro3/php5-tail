@@ -1,5 +1,5 @@
 install: 
-	cp ./phpTail/php5-tail /usr/local/bin/
+	cp ./phpTail/php5-tail.php /usr/local/bin/php5-tail
 	chmod a+x /usr/local/bin/php5-tail
 
 uninstall: 
