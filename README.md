@@ -30,32 +30,33 @@ php5-tail is a daemon implementation of "tail-F".
 
 ### 設定ファイル ###
 
-/etc/php5-tail/config.php
+/etc/php5-tail/php5-tail.conf
 
-```php
-<?php
-return array(
-    'path'       => 'tail 対象ファイル名',
-    'pos_file'   => '最終読み込み位置ようファイル名',
-    'format'     => 'ログの正規表現フォーマット',
-    'log'        => 'ログファイル',
-    'initialize' => '初期動作関数フィアル名',
-    'action'     => '実動作関数フィアル名',
-    'output'     => '出力関数ファイル名'
-);
 ```
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; php5-tail Configuration ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-```php
-<?php
-return array(
-    'path'       => '/var/log/nginx/access.log',
-    'pos_file'   => '/etc/php5-tail/cache/access.pos',
-    'format'     => '/^(?<host>\S*) \S* \S* \[(?<time>[^\]]*)\] "GET +(?<path>\S*) +\S*" 200 \S* "(?<referer>[^\"]*)" "(?<agent>[^\"]*)"$/',
-    'log'        => '/var/log/php5-tail.log',
-    'initialize' => '/etc/php5-tail/method/format.php',
-    'action'     => '/etc/php5-tail/method/parse.php',
-    'output'     => '/etc/php5-tail/method/stdout.php'
-);
+; Monitored file
+path = /var/log/nginx/access.log
+
+; Analysis format
+format = '/^(?<host>\S*) \S* \S* \[(?<time>[^\]]*)\] "GET +(?<path>\S*) +\S*" 200 \S* "(?<referer>[^\"]*)" "(?<agent>[^\"]*)"$/'
+
+; Log file path
+log = /var/log/php5-tail.log
+
+; File for saving position
+pos_file = /etc/php5-tail/cache/access.pos
+
+; The file name for the initialization function
+initialize = /etc/php5-tail/method/format.php
+
+; The file name for the action function
+action = /etc/php5-tail/method/parse.php
+
+; The file name for the output function
+output = /etc/php5-tail/method/stdout.php
 ```
     
 ### 出力関数 ###

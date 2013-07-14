@@ -12,12 +12,8 @@ return function ($config, $buff) {
     $output  = include $config['output'];
 
     foreach ($list as $row) {
-        if (preg_match($config['format'], $row, $matches)) {
-            unset ($matches[0]);
-            foreach ($matches as $key => $value) {
-                $values[$config['format_keys'][($key - 1)]] = $value;
-            }
-            $output($values);
+        if (preg_match_all($config['format'], $row, $matches)) {
+            $output($matches);
         }
     }
 };

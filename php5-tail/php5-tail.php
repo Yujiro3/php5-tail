@@ -3,8 +3,14 @@
 /**
  * php5-tail本体
  *
+ * PHP versions 5.3.x
+ *
+ *      php5-xmpp : https://github.com/Yujiro3/php5-php
+ *      Copyright (c) 2011-2013 sheeps.me All Rights Reserved.
+ *
  * @package         php5-tail
- * @author          Yujiro Takahashi <yujiro3@gamil.com>
+ * @copyright       Copyright (c) 2011-2013 sheeps.me
+ * @author          Yujiro Takahashi <yujiro3@gmail.com>
  * @filesource
  */
 
@@ -89,6 +95,18 @@ class Tail {
      private $_watch;
 
     /**
+     * ベースイベント
+     * @var resource
+     */
+     private $_base;
+
+    /**
+     * イベント
+     * @var resource
+     */
+     private $_event;
+
+    /**
      * コンストラクタ
      *
      * @access public
@@ -97,11 +115,11 @@ class Tail {
      * @return void
      */
     public function __construct($argc, $argv) {
-        $help = 'Usage: php5-tail.php [options]'."\n".
+        $help = 'Usage: php5-tail [options]'."\n".
                 '    -c, --config PATH   Config file path'."\n".
                 '    -u, --user USER     Change user'."\n".
                 '    -g, --group GROUP   Change group'."\n".
-                '    -d, --daemo  PATH   Process ID file path'."\n".
+                '    -d, --daemo PATH    Process ID file path'."\n".
                 '    -h, --help          This Help.'."\n";
         $this->_pidfile = '';
         $this->_pid = $this->_uid = $this->_gid = 0;
@@ -111,7 +129,7 @@ class Tail {
                 switch ($argv[$pos]) {
                 case '-c':
                 case '--config':
-                    $this->config = $argv[++$pos];
+                    $this->_confile = $argv[++$pos];
                     break;
                 case '-u':
                 case '--user':
@@ -155,15 +173,9 @@ class Tail {
      */
     public function watch() {
         declare(ticks = 1);
-        while (($events = @inotify_read($this->_inotify)) !== false) {
-            foreach ($events as $event) {
-                if ($event['wd'] === $this->_watch['dir']) {
-                    $this->_eventDir($event);
-                } elseif ($event['wd'] === $this->_watch['file']) {
-                    $this->_eventFile($event);
-                }
-            }
-        } // while (($events = inotify_read($this->_inotify)) !== false)
+
+        event_add($this->_event);
+        event_base_loop($this->_base);
     }
 
     /**
@@ -176,10 +188,10 @@ class Tail {
         ob_implicit_flush(true);
         gc_enable();
 
-        if (!is_readable($this->config)) {
-            throw new \Exception(sprintf("File '%s' does not exists or is not readable", $this->config));
+        if (!is_readable($this->_confile)) {
+            throw new \Exception(sprintf("File '%s' does not exists or is not readable", $this->_confile));
         }
-        $this->config = include $this->config;
+        $this->config = parse_ini_file($this->_confile);
         $this->_name  = basename($this->config['path']);
         $this->_dir   = dirname($this->config['path']);
 
@@ -209,6 +221,9 @@ class Tail {
         if (!extension_loaded('inotify')) {
             throw new \Exception('Inotify extension not loaded !');
         }
+        if (!extension_loaded('libevent')) {
+            throw new \Exception('Libevent extension not loaded !');
+        }
 
         if (!is_readable($this->_dir)) {
             throw new \Exception(sprintf("Directory '%s' does not exists", $this->_dir));
@@ -225,11 +240,20 @@ class Tail {
             $this->_offset = include $this->config['pos_file'];
             $this->_offset = intval($this->_offset);
         } else {
+            if (!is_writable(dirname($this->config['pos_file']))) {
+                throw new \Exception(sprintf("Directory '%s' does not writable", dirname($this->config['pos_file'])));
+            }
             $this->_offset = 0;
         }
 
-        if (!is_writable($this->config['log'])) {
-            throw new \Exception(sprintf("File '%s' does not writable", $this->config['log']));
+        if (file_exists($this->config['log'])) {
+            if (!is_writable($this->config['log'])) {
+                throw new \Exception(sprintf("File '%s' does not writable", $this->config['log']));
+            }
+        } else {
+            if (!is_writable(dirname($this->config['log']))) {
+                throw new \Exception(sprintf("Directory '%s' does not writable", dirname($this->config['log'])));
+            }
         }
 
         $this->_inotify = inotify_init();
@@ -241,6 +265,17 @@ class Tail {
         if ($this->_watch['dir'] === false) {
             throw new \Exception(sprintf("Failed to watch directory '%s'", $this->_dir));
         }
+
+        $this->_base = event_base_new();
+        if ($this->_base === false) {
+            throw new \Exception('Failed to obtain an Event base instance');
+        }
+
+        $this->_event = event_new();
+        if ($this->_event === false) {
+            throw new \Exception('Failed to obtain an event instance');
+        }
+
         @umask(0);
 
         $this->_open();
@@ -278,12 +313,16 @@ class Tail {
         if (!is_readable($this->config['path']) || ($this->_handle = fopen($this->config['path'], 'r')) === false) {
             throw new \Exception(sprintf("File '%s' does not exists or is not readable", $this->config['path']));
         }
+
         fseek($this->_handle, $this->_offset, SEEK_SET);
 
         $this->_watch['file'] = inotify_add_watch($this->_inotify, $this->config['path'], (IN_MODIFY | self::RM_WATCH));
         if ($this->_watch['file'] === false) {
             throw new \Exception(sprintf("Failed to watch file '%s'", $this->config['path']));
         }
+        event_set($this->_event, $this->_inotify, EV_READ | EV_PERSIST, array(&$this, '_event'));
+        event_base_set($this->_event, $this->_base);
+
         return true;
     }
 
@@ -296,6 +335,26 @@ class Tail {
     private function _close() {
         inotify_rm_watch($this->_inotify, $this->_watch['file']);
         fclose($this->_handle);
+    }
+
+    /**
+     * イベント処理
+     *
+     * @access private
+     * @param  resource $inotify  inotify インスタンス
+     * @param  integer  $event    イベントID
+     * @return array   設定リスト
+     */
+    private function _event($inotify, $event) {
+        $events = inotify_read($inotify);
+
+        foreach ($events as $row) {
+            if ($row['wd'] === $this->_watch['dir']) {
+                $this->_eventDir($row);
+            } elseif ($row['wd'] === $this->_watch['file']) {
+                $this->_eventFile($row);
+            }
+        }
     }
 
     /**
@@ -345,6 +404,8 @@ class Tail {
          case SIGQUIT:  // 終了
          case SIGTERM:  // 正常終了
          case SIGTSTP:  // サスペンド
+            event_base_loopexit($this->_base);
+
             if (!empty($this->_watch['file'])) {
                 inotify_rm_watch($this->_inotify, $this->_watch['file']);
             }
