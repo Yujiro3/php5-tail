@@ -19,7 +19,22 @@ php5-tail is a daemon implementation of "tail-F".
     # echo extension=inotify.so > inotify.ini
     # cd /etc/php5/conf.d
     # ln -s ../mods-available/inotify.ini ./20-inotify.ini
+
+### libeventモジュールのインストール ###
     
+    $ wget http://pecl.php.net/get/libevent-0.1.0.tgz
+    $ tar xzvf libevent-0.1.0.tgz
+    $ cd libevent-0.1.0
+    $ phpize
+    $ ./configure
+    $ make
+    $ sudo -s
+    # make install
+    # cd /etc/php5/mods-available
+    # echo extension=libevent.so > libevent.ini
+    # cd /etc/php5/conf.d
+    # ln -s ../mods-available/libevent.ini ./20-libevent.ini
+
 
 ### クイックスタート ###
     
