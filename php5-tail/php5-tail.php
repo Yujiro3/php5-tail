@@ -107,6 +107,12 @@ class Tail {
      private $_event;
 
     /**
+     * シグナル
+     * @var resource
+     */
+     private $_signal;
+
+    /**
      * コンストラクタ
      *
      * @access public
@@ -155,13 +161,6 @@ class Tail {
             exit(1);
         }
 
-        $handler =  array(&$this, '_shutdown');    
-        pcntl_signal(SIGINT,  $handler);
-        pcntl_signal(SIGQUIT, $handler);
-        pcntl_signal(SIGTERM, $handler);
-        pcntl_signal(SIGTSTP, $handler);
-        pcntl_signal(SIGHUP,  $handler);
-
         $this->_initialize();
     }
 
@@ -175,6 +174,8 @@ class Tail {
         declare(ticks = 1);
 
         event_add($this->_event);
+        event_add($this->_signal);
+
         event_base_loop($this->_base);
     }
 
@@ -272,7 +273,8 @@ class Tail {
         }
 
         $this->_event = event_new();
-        if ($this->_event === false) {
+        $this->_signal = event_new();
+        if ($this->_event === false || $this->_signal === false) {
             throw new \Exception('Failed to obtain an event instance');
         }
 
@@ -322,6 +324,9 @@ class Tail {
         }
         event_set($this->_event, $this->_inotify, EV_READ | EV_PERSIST, array(&$this, '_event'));
         event_base_set($this->_event, $this->_base);
+
+        event_set($this->_signal, SIGHUP, EV_SIGNAL, array(&$this, '_shutdown'));
+        event_base_set($this->_signal, $this->_base);
 
         return true;
     }
